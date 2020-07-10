@@ -42,8 +42,11 @@ func notifySend(summary string, description string, eventDiff int64) {
 	// Obtain Current Path
 	binPath, _ := filepath.Abs(filepath.Dir(os.Args[0]))
 
-	// Setup Title
-	title := "Google Calendar (" + strconv.FormatInt(eventDiff, 10) + "min Reminder)"
+	// Setup Title | in or ago
+	title := "Google Calendar (in " + strconv.FormatInt(eventDiff, 10) + "min)"
+	if eventDiff < 0 {
+		title = "Google Calendar (" + strconv.FormatInt(eventDiff*-1, 10) + "min ago)"
+	}
 
 	// INITIATE NOTIFICATION
 	cmd := exec.Command(
@@ -88,7 +91,10 @@ func main() {
 		log.Fatalf("Unable to retrieve next ten of the user's events: %v", err)
 	}
 
-	for {
+	// Variables Used
+	eventsDone := map[string]Event{}
+
+	for { // Keep Watching
 		// Check Events
 		nowTime := time.Now()
 
@@ -143,6 +149,8 @@ func main() {
 
 					// Print the Difference till Event
 					fmt.Printf("\t -Time Till Event: %.2fmin\n", eventDiff.Minutes())
+					// Print out the IDs
+					fmt.Printf("\t -ID: %v\n", item.Id)
 				}
 
 				for i, d := range reminders {
@@ -152,19 +160,81 @@ func main() {
 					if args.isList {
 						fmt.Printf("\t -Reminder [%d] = %dmin \t Remind in [%.2fmin]\n", i, d, remIn)
 					} else {
-						// Check to Remind!
-						if remIn == 0.0 { // Issue a Reminder
-							notifySend(item.Summary, item.Description, int64(remIn))
-						}
+						// Check Integrity for Changes
+						checkIntegrity(item, eventsDone)
 
+						// Check to Remind!
+						checkRemind(eventsDone, item, remIn, int64(eventDiff.Minutes()))
 					}
 				}
 
 			}
 		}
 
+		// Break out if just Listing
+		if args.isList {
+			os.Exit(0)
+		}
+
 		// Sleep for 10 Seconds
-		time.Sleep(10 * time.Second)
+		time.Sleep(30 * time.Second)
 	}
 
+}
+
+// Event Structure
+type Event struct {
+	didRemind     bool   // If Reminder was Executed
+	startDate     string // Starting Date
+	endDate       string // Ending Date
+	startDateTime string // Starting Date Time
+	endDateTime   string // Ending Date Time
+}
+
+// Checks if the Event was Modified and Updates the Map
+func checkIntegrity(item *calendar.Event, eList map[string]Event) {
+	// Check if it's Stored
+	if val, ok := eList[item.Id]; ok {
+		// Check if Values Changed
+		if val.startDate != item.Start.Date ||
+			val.endDate != item.End.Date ||
+			val.startDateTime != item.Start.DateTime ||
+			val.endDateTime != item.End.DateTime {
+
+			// Modify Event
+			val = Event{
+				didRemind:     false,
+				startDate:     item.Start.Date,
+				startDateTime: item.Start.DateTime,
+				endDate:       item.End.Date,
+				endDateTime:   item.End.DateTime,
+			}
+		}
+	}
+}
+
+/** Validates to see whether to remind Event
+  *  and stores it's ID to keep track of it
+  * @param eList A Map of the Event IDs that were Notified
+  * @param item Pointer to the Calendar Event
+  * @param remIn Time Difference to wait till Reminder should Pop up
+	* @param eMinutes Time of the Event
+*/
+func checkRemind(eList map[string]Event, item *calendar.Event, remIn float64, eMinutes int64) {
+	// ID Should'nt be Used before
+	//  or wasn't Reminded Before
+	val, ok := eList[item.Id]
+	if (!ok || !val.didRemind) && remIn <= 0.0 {
+		fmt.Printf("Reminder: [%v](%v) \n%v\n", item.Summary, eMinutes, item.Summary)
+		notifySend(item.Summary, item.Description, eMinutes)
+
+		// Keep Track of Event
+		eList[item.Id] = Event{
+			true,
+			item.Start.Date,
+			item.End.Date,
+			item.Start.DateTime,
+			item.End.DateTime,
+		}
+	}
 }
