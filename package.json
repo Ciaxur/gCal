@@ -1,0 +1,12 @@
+{
+  "name": "calendar-notificaitons",
+  "version": "0.0.1",
+  "description": "Google Calendar Notifications for Linux",
+  "main": "main.go",
+  "scripts": {
+    "start": "go run ./src"
+  },
+  "author": "Omar Omar",
+  "license": "MIT",
+  "private": false
+}
