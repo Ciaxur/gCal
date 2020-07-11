@@ -21,6 +21,7 @@ import (
 type cliArguments struct {
 	eventNum int  // Number of Events to Look for (Default = 10)
 	isList   bool // Only List Events
+	stillRun bool // Runs Notification even if only List enabled (Default = False)
 }
 
 // Parse through the CLI Arguments
@@ -32,9 +33,12 @@ func parseInput() cliArguments {
 	var eventNum = flag.Int("Events", 10, "Number of Events Accounted for")
 	flag.IntVar(eventNum, "e", 10, "Number of Events Accounted for")
 
+	var stilLRun = flag.Bool("Run", false, "Still Run even if only List Enabled")
+	flag.BoolVar(stilLRun, "r", false, "Still Run even if only List Enabled")
+
 	flag.Parse()
 
-	return cliArguments{*eventNum, *flagList}
+	return cliArguments{*eventNum, *flagList, *stilLRun}
 }
 
 // Wrapper around notify-send
@@ -80,21 +84,19 @@ func main() {
 		log.Fatalf("Unable to retrienve Calendar Client: %v", err)
 	}
 
-	// Check every minute
-	// for {
-	t := time.Now().Format(time.RFC3339)
-
-	// Obtain Recent Events
-	events, err := srv.Events.List("primary").ShowDeleted(false).
-		SingleEvents(true).TimeMin(t).MaxResults(int64(args.eventNum)).OrderBy("startTime").Do()
-	if err != nil {
-		log.Fatalf("Unable to retrieve next ten of the user's events: %v", err)
-	}
-
 	// Variables Used
-	eventsDone := map[string]Event{}
+	eventsMap := map[string]Event{}
 
 	for { // Keep Watching
+		t := time.Now().Format(time.RFC3339)
+
+		// Obtain Recent Events
+		events, err := srv.Events.List("primary").ShowDeleted(false).
+			SingleEvents(true).TimeMin(t).MaxResults(int64(args.eventNum)).OrderBy("startTime").Do()
+		if err != nil {
+			log.Fatalf("Unable to retrieve next ten of the user's events: %v", err)
+		}
+
 		// Check Events
 		nowTime := time.Now()
 
@@ -116,6 +118,9 @@ func main() {
 						reminders = append(reminders, rem.Minutes)
 					}
 				}
+
+				// Add New Reminders to Map
+				addReminders(reminders, item.Id, eventsMap)
 
 				// Specific Time Range
 				date := item.Start.DateTime
@@ -153,18 +158,22 @@ func main() {
 					fmt.Printf("\t -ID: %v\n", item.Id)
 				}
 
+				// Go through each Reminder
 				for i, d := range reminders {
 					remIn := math.Floor(eventDiff.Minutes() - float64(d))
 
 					// List only
 					if args.isList {
 						fmt.Printf("\t -Reminder [%d] = %dmin \t Remind in [%.2fmin]\n", i, d, remIn)
-					} else {
+					}
+
+					// Check Reminders if List or not
+					if !args.isList || (args.isList && args.stillRun) {
 						// Check Integrity for Changes
-						checkIntegrity(item, eventsDone)
+						checkIntegrity(item, eventsMap)
 
 						// Check to Remind!
-						checkRemind(eventsDone, item, remIn, int64(eventDiff.Minutes()))
+						checkRemind(eventsMap, item, remIn, int64(eventDiff.Minutes()))
 					}
 				}
 
@@ -172,69 +181,17 @@ func main() {
 		}
 
 		// Break out if just Listing
-		if args.isList {
+		if args.isList && !args.stillRun {
 			os.Exit(0)
+		}
+
+		// Better Output
+		if args.isList {
+			println()
 		}
 
 		// Sleep for 10 Seconds
 		time.Sleep(30 * time.Second)
 	}
 
-}
-
-// Event Structure
-type Event struct {
-	didRemind     bool   // If Reminder was Executed
-	startDate     string // Starting Date
-	endDate       string // Ending Date
-	startDateTime string // Starting Date Time
-	endDateTime   string // Ending Date Time
-}
-
-// Checks if the Event was Modified and Updates the Map
-func checkIntegrity(item *calendar.Event, eList map[string]Event) {
-	// Check if it's Stored
-	if val, ok := eList[item.Id]; ok {
-		// Check if Values Changed
-		if val.startDate != item.Start.Date ||
-			val.endDate != item.End.Date ||
-			val.startDateTime != item.Start.DateTime ||
-			val.endDateTime != item.End.DateTime {
-
-			// Modify Event
-			val = Event{
-				didRemind:     false,
-				startDate:     item.Start.Date,
-				startDateTime: item.Start.DateTime,
-				endDate:       item.End.Date,
-				endDateTime:   item.End.DateTime,
-			}
-		}
-	}
-}
-
-/** Validates to see whether to remind Event
-  *  and stores it's ID to keep track of it
-  * @param eList A Map of the Event IDs that were Notified
-  * @param item Pointer to the Calendar Event
-  * @param remIn Time Difference to wait till Reminder should Pop up
-	* @param eMinutes Time of the Event
-*/
-func checkRemind(eList map[string]Event, item *calendar.Event, remIn float64, eMinutes int64) {
-	// ID Should'nt be Used before
-	//  or wasn't Reminded Before
-	val, ok := eList[item.Id]
-	if (!ok || !val.didRemind) && remIn <= 0.0 {
-		fmt.Printf("Reminder: [%v](%v) \n%v\n", item.Summary, eMinutes, item.Summary)
-		notifySend(item.Summary, item.Description, eMinutes)
-
-		// Keep Track of Event
-		eList[item.Id] = Event{
-			true,
-			item.Start.Date,
-			item.End.Date,
-			item.Start.DateTime,
-			item.End.DateTime,
-		}
-	}
 }

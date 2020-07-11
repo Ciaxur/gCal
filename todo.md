@@ -5,3 +5,4 @@
 
 ### CLI
 - [ ] More Arguments?
+- [ ] Colored Outputs
