@@ -1,0 +1,9 @@
+# Dev Stuff 🤖
+.vscode
+build
+
+# Build Stuff 🔨
+./gCal
+
+# Secret Stuff 🐍
+*.json
