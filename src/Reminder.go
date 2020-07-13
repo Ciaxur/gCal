@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"time"
 
 	"google.golang.org/api/calendar/v3"
 )
@@ -14,6 +16,10 @@ type Reminder struct {
 
 // Event Structure
 type Event struct {
+	// Event Basic Info
+	id      string
+	sumamry string
+
 	// Event Reminders
 	reminders []Reminder
 
@@ -51,6 +57,8 @@ func addReminders(reminders []int64, eID string, eList map[string]Event) {
 
 	// Update Event List
 	eList[eID] = Event{
+		id:            eList[eID].id,
+		sumamry:       eList[eID].sumamry,
 		reminders:     pReminders,
 		startDate:     eList[eID].startDate,
 		endDate:       eList[eID].endDate,
@@ -71,7 +79,9 @@ func checkIntegrity(item *calendar.Event, eList map[string]Event) {
 
 			// Modify Event
 			// Without Reminders
-			val = Event{
+			eList[item.Id] = Event{
+				id:            item.Id,
+				sumamry:       item.Summary,
 				reminders:     make([]Reminder, 0), // Reset Reminders
 				startDate:     item.Start.Date,
 				startDateTime: item.Start.DateTime,
@@ -97,6 +107,8 @@ func checkRemind(eList map[string]Event, item *calendar.Event, remIn float64, eM
 	// Check if Tracked
 	if !ok { // Keep Track of Event
 		eList[item.Id] = Event{
+			item.Id,
+			item.Summary,
 			make([]Reminder, 0),
 			item.Start.Date,
 			item.End.Date,
@@ -104,15 +116,67 @@ func checkRemind(eList map[string]Event, item *calendar.Event, remIn float64, eM
 			item.End.DateTime,
 		}
 	} else { // Check for Reminders
-		for _, reminder := range val.reminders {
-
-			if !reminder.didRemind && (remIn <= 0.0 && remIn >= -1.0) {
+		for i, reminder := range val.reminders {
+			// Threshold of 0-4min
+			if !reminder.didRemind && (remIn <= 0.0 && remIn >= -4.0) {
 				fmt.Printf("Reminder: [%v](%v) \n%v\n", item.Summary, eMinutes, item.Summary)
 				notifySend(item.Summary, item.Description, eMinutes)
-				reminder.didRemind = true
+				val.reminders[i].didRemind = true
 			}
 
 		}
 	}
 
+}
+
+/** Prints out Event to stdout in a Neat Way
+  * @param title The Title of the Event
+	* @param event Pointer to the Event to print
+*/
+func printEvent(event Event) {
+	// Basic Event Information
+	fmt.Printf("[%s]\n", event.sumamry)
+	fmt.Printf("\t - ID: %s\n", event.id)
+	fmt.Printf("\t - Date Range: %s - %s\n", event.startDate, event.endDate)
+	fmt.Printf("\t - DateTime Range: %s - %s\n", event.startDateTime, event.endDateTime)
+
+	// Reminder Information
+	fmt.Printf("\t - Reminders: \n")
+	for i, reminder := range event.reminders {
+		fmt.Printf("\t\t - Reminder[%d]\n", i)
+		fmt.Printf("\t\t\t - Minutes Before: %dmin\n", reminder.minBefore)
+		fmt.Printf("\t\t\t - Did Remind: %v\n", reminder.didRemind)
+	}
+}
+
+/** Garbage Collection for Events
+ * Looks through to see if an Event Passed
+ *  a threshold of time
+ * @param eList Map of Events
+ */
+func cleanupEvents(eList map[string]Event) {
+	// Keep Track of Current Time and Event Date
+	now := time.Now()
+	eventDate := ""
+
+	for key, val := range eList {
+		if len(val.endDate) != 0 { // Entire Day Event
+			eventDate = val.endDate
+		} else if len(val.endDateTime) != 0 { // Date Time Event
+			eventDate = val.endDateTime
+		}
+
+		// Garbage Collection
+		// Try to Parse Date
+		d, err := time.Parse(time.RFC3339, eventDate)
+		if err != nil {
+			log.Printf("Garbage Collection: Error parsing %s\n", eventDate)
+		} else {
+			if d.Sub(now).Hours() < -2.00 { // Remove if 2 Hours Past
+				delete(eList, key)
+				continue
+			}
+		}
+
+	}
 }

@@ -3,7 +3,7 @@
 build
 
 # Build Stuff 🔨
-./gCal
+gCal
 
 # Secret Stuff 🐍
 *.json

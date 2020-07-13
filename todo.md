@@ -1,7 +1,8 @@
 ## To-Do List
 ### Process
 - [ ] Daemonize Process
-- [ ] Clean up IDs Map at the end of the Day
+- [x] Clean up IDs Map at the end of the Day
+- [ ] Performance: Reduce Google API Requests
 
 ### CLI
 - [ ] More Arguments?
