@@ -140,7 +140,6 @@ func checkRemind(eList map[string]Event, item *calendar.Event) {
 		for i, reminder := range val.reminders {
 			// Check when to Remind
 			remIn := math.Floor(dEventTime.Minutes() - float64(reminder.minBefore))
-			Out.Info.Printf("Remind In: %.2f\n", remIn)
 
 			// Threshold of 0-1min
 			if !reminder.didRemind && (remIn <= 0.0 && remIn >= -1.0) {
@@ -160,7 +159,7 @@ func checkRemind(eList map[string]Event, item *calendar.Event) {
 */
 func printEvent(event Event) {
 	// Basic Event Information
-	fmt.Printf("[%s]\n", event.sumamry)
+	Out.Info.Printf("[%s]\n", event.sumamry)
 	fmt.Printf("\t - ID: %s\n", event.id)
 	fmt.Printf("\t - Date Range: %s - %s\n", event.startDate, event.endDate)
 	fmt.Printf("\t - DateTime Range: %s - %s\n", event.startDateTime, event.endDateTime)
