@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"google.golang.org/api/calendar/v3"
@@ -92,14 +93,21 @@ func checkIntegrity(item *calendar.Event, eList map[string]Event) {
 	}
 }
 
+// Parses Given String as RFC3339 Date
+func parseDate(date string) time.Time {
+	btrDate, err := time.Parse(time.RFC3339, date)
+	if err != nil {
+		log.Fatalf("Data Parse [%v] Failed: %v", date, err)
+	}
+	return btrDate
+}
+
 /** Validates to see whether to remind Event
-  *  and stores it's ID to keep track of it
-  * @param eList A Map of the Event IDs that were Notified
-  * @param item Pointer to the Calendar Event
-  * @param remIn Time Difference to wait till Reminder should Pop up
-	* @param eMinutes Time of the Event
-*/
-func checkRemind(eList map[string]Event, item *calendar.Event, remIn float64, eMinutes int64) {
+ *  and stores it's ID to keep track of it
+ * @param eList A Map of the Event IDs that were Notified
+ * @param item Pointer to the Calendar Event
+ */
+func checkRemind(eList map[string]Event, item *calendar.Event) {
 	// ID Should'nt be Used before
 	//  or wasn't Reminded Before
 	val, ok := eList[item.Id]
@@ -116,11 +124,28 @@ func checkRemind(eList map[string]Event, item *calendar.Event, remIn float64, eM
 			item.End.DateTime,
 		}
 	} else { // Check for Reminders
+		// Get Current Time
+		nowTime := time.Now()
+
+		// Parse Event's Start Time
+		eDateStr := item.Start.DateTime
+		if len(eDateStr) == 0 {
+			eDateStr = item.Start.Date + "T00:00:00-04:00"
+		}
+		eventTime := parseDate(eDateStr)
+
+		// Time till Event
+		dEventTime := eventTime.Sub(nowTime)
+
 		for i, reminder := range val.reminders {
-			// Threshold of 0-4min
-			if !reminder.didRemind && (remIn <= 0.0 && remIn >= -4.0) {
-				fmt.Printf("Reminder: [%v](%v) \n%v\n", item.Summary, eMinutes, item.Summary)
-				notifySend(item.Summary, item.Description, eMinutes)
+			// Check when to Remind
+			remIn := math.Floor(dEventTime.Minutes() - float64(reminder.minBefore))
+			Out.Info.Printf("Remind In: %.2f\n", remIn)
+
+			// Threshold of 0-1min
+			if !reminder.didRemind && (remIn <= 0.0 && remIn >= -1.0) {
+				fmt.Printf("Reminder: [%v](In %.0f) \n%v\n", item.Summary, dEventTime.Minutes(), item.Summary)
+				notifySend(item.Summary, item.Description, int64(dEventTime.Minutes()))
 				val.reminders[i].didRemind = true
 			}
 
@@ -146,6 +171,17 @@ func printEvent(event Event) {
 		fmt.Printf("\t\t - Reminder[%d]\n", i)
 		fmt.Printf("\t\t\t - Minutes Before: %dmin\n", reminder.minBefore)
 		fmt.Printf("\t\t\t - Did Remind: %v\n", reminder.didRemind)
+
+		// Time Till Reminder (Only Non-Reminded)
+		if !reminder.didRemind && len(event.id) != 0 { // Make sure Event Data is Stored
+			date := event.startDateTime
+			if len(date) == 0 {
+				date = event.startDate + "T00:00:00-04:00"
+			}
+			rTime := parseDate(date)
+			tRemind := rTime.Sub(time.Now()).Minutes() - float64(reminder.minBefore)
+			fmt.Printf("\t\t\t - Till Reminder: %.1fmin\n", tRemind)
+		}
 	}
 }
 
