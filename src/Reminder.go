@@ -196,7 +196,7 @@ func cleanupEvents(eList map[string]Event) {
 
 	for key, val := range eList {
 		if len(val.endDate) != 0 { // Entire Day Event
-			eventDate = val.endDate
+			eventDate = val.endDate + "T00:00:00-04:00"
 		} else if len(val.endDateTime) != 0 { // Date Time Event
 			eventDate = val.endDateTime
 		}
